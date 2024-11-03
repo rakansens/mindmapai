@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.react-flow__node {
+  @apply select-none;
+}
+
+.react-flow__handle {
+  @apply bg-blue-400 border-2 border-white transition-all duration-300;
+}
+
+.react-flow__edge-path {
+  @apply stroke-2 stroke-blue-400/70;
+}
+
+.react-flow__edge {
+  @apply transition-opacity duration-300;
+}
+
+.react-flow__edge:hover {
+  @apply opacity-100;
+}
+
+.tooltip:hover::after {
+  content: attr(title);
+  @apply absolute -bottom-8 left-1/2 transform -translate-x-1/2
+         bg-gray-800 text-white text-xs rounded px-2 py-1
+         animate-fadeIn;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typing-cursor::after {
+  content: '|';
+  margin-left: 2px;
+  animation: blink 1s infinite;
+  @apply text-white font-bold;
+}
+
+.node-appear {
+  animation: nodeAppear 0.3s ease-out forwards;
+}
+
+@keyframes nodeAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-blue-400 rounded-full hover:bg-blue-500 transition-colors;
+}
