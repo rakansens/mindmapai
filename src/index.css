@@ -82,3 +82,104 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-blue-400 rounded-full hover:bg-blue-500 transition-colors;
 }
+
+@keyframes generating-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+}
+
+.generating-pulse {
+  animation: generating-pulse 1.5s infinite;
+  border: 2px solid #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+}
+
+.generating-node {
+  animation: pulse 1.5s infinite;
+  border: 2px solid #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+/* スピナーの色やサイズを調整 */
+.generating-node .animate-spin {
+  border-width: 2px;
+  border-color: #3b82f6 transparent transparent transparent;
+}
+
+/* メニューのフェードアニメーション */
+.menu-fade-enter {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.menu-fade-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 200ms, transform 200ms;
+}
+
+.menu-fade-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.menu-fade-exit-active {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 200ms, transform 200ms;
+}
+
+/* ReactFlow特有のスタイルを強制上書き */
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  background-color: #60a5fa !important;
+  border: 2px solid white !important;
+  transition: all 0.3s ease !important;
+}
+
+.react-flow__handle:hover {
+  background-color: #3b82f6 !important;
+  transform: scale(1.2);
+}
+
+.react-flow__edge {
+  transition: stroke 0.3s ease !important;
+}
+
+.react-flow__edge:hover {
+  stroke: #3b82f6 !important;
+  stroke-width: 2px !important;
+}
+
+/* エッジのスタイル */
+.react-flow__edge-path {
+  stroke: #60a5fa !important;
+  stroke-width: 2px !important;
+  transition: all 0.3s ease !important;
+}

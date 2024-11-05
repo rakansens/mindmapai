@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Panel, useReactFlow } from 'reactflow';
 import { Sparkles } from 'lucide-react';
 import { useMindMapStore } from '../store/mindMapStore';
-import { useOpenAI } from '../utils/openai';
+import { useOpenAI, TopicTree } from '../utils/openai';
 
 type LayoutStyle = 'horizontal' | 'radial';
+
+// 階層構造の型を定義
+interface HierarchyItem {
+  level: number;
+  text: string;
+  children: HierarchyItem[];
+}
 
 export function AIGenerator() {
   const [prompt, setPrompt] = useState('');
@@ -12,58 +19,45 @@ export function AIGenerator() {
   const [isLoading, setIsLoading] = useState(false);
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('horizontal');
   const { addNode, nodes, updateNodeText } = useMindMapStore();
-  const { generateMindMap, apiKey } = useOpenAI();
+  const { generateSubTopics, apiKey } = useOpenAI();
   const { fitView } = useReactFlow();
 
-  const parseHierarchy = (text: string) => {
-    const lines = text.split('\n').filter(line => line.trim());
-    const hierarchy: { level: number; text: string; children: any[] }[] = [];
-    let currentMain: any = null;
-    let currentSub: any = null;
-
-    lines.forEach(line => {
-      const cleanText = line.replace(/^[└├│\s─]+/, '').trim();
-      if (!cleanText || cleanText.startsWith('テーマ：')) return;
-
-      if (line.startsWith('メインブランチ')) {
-        currentMain = { level: 0, text: cleanText, children: [] };
-        hierarchy.push(currentMain);
-        currentSub = null;
-      } else if (line.match(/^[└├]──\s/)) {
-        currentSub = { level: 1, text: cleanText, children: [] };
-        if (currentMain) currentMain.children.push(currentSub);
-      } else if (line.match(/^\s+[└├]──\s/)) {
-        const grandChild = { level: 2, text: cleanText, children: [] };
-        if (currentSub) currentSub.children.push(grandChild);
+  const parseTopicTree = (topicTree: TopicTree): HierarchyItem[] => {
+    const hierarchy: HierarchyItem[] = [];
+    
+    const processNode = (node: TopicTree, level: number = 0): HierarchyItem => {
+      const item: HierarchyItem = {
+        level,
+        text: node.label,
+        children: []
+      };
+      
+      if (node.children && node.children.length > 0) {
+        item.children = node.children.map(child => processNode(child, level + 1));
       }
-    });
+      
+      return item;
+    };
+
+    if (topicTree.children) {
+      hierarchy.push(...topicTree.children.map(child => processNode(child, 0)));
+    }
 
     return hierarchy;
   };
 
   const generateNodes = async (
     parentNode: any,
-    items: { text: string; children: any[] }[],
+    items: HierarchyItem[],  // 型を修正
     level: number = 0
   ) => {
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      const newNode = addNode(parentNode, item.text, layoutStyle);
+      const newNode = addNode(parentNode, item.text, index);
 
       if (item.children && item.children.length > 0) {
         await generateNodes(newNode, item.children, level + 1);
-      }
-
-      if (level <= 1) {
-        setTimeout(() => {
-          fitView({
-            duration: 400,
-            padding: Math.max(0.1, 0.5 - (level * 0.1)),
-            minZoom: 0.4,
-            maxZoom: 1,
-          });
-        }, 50);
       }
     }
   };
@@ -81,8 +75,12 @@ export function AIGenerator() {
 
     try {
       setIsLoading(true);
-      const response = await generateMindMap(prompt);
-      const hierarchy = parseHierarchy(response);
+      const response = await generateSubTopics(prompt, {
+        mode: 'quick',
+        quickType: 'simple'
+      });
+      
+      const hierarchy = parseTopicTree(response);
 
       const rootNode = nodes.find(n => n.id === '1');
       if (rootNode) {

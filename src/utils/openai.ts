@@ -1,120 +1,371 @@
-import { useState } from 'react';
+import { create } from 'zustand';
+import OpenAI from 'openai';
 
-const API_BASE_URL = 'https://api.openai.com/v1';
+interface OpenAIStore {
+  apiKey: string | null;
+  openai: OpenAI | null;
+  setApiKey: (key: string) => void;
+  generateSubTopics: (topic: string, options?: GenerateOptions) => Promise<TopicTree>;
+}
 
-const SYSTEM_PROMPT = `あなたは構造化されたマインドマップを生成するAIアシスタントです。
-以下の制約を厳密に守ってマインドマップを生成してください：
+export interface TopicTree {
+  label: string;
+  children: TopicTree[];
+  description?: string;
+}
 
-【必須の構造】
-1. メインブランチ: 必ず3つ
-2. 子ノード: 各メインブランチに3つ
-3. 孫ノード: 各子ノードに2つ
-4. 階層: メインブランチ→子ノード→孫ノードの3段階構造を必ず守る
+export interface GenerateOptions {
+  mode?: 'what' | 'why' | 'how' | 'which' | 'quick' | 'detailed';
+  whatType?: 'simple' | 'detailed';
+  whyType?: 'simple' | 'detailed';
+  howType?: 'simple' | 'detailed';
+  whichType?: 'simple' | 'detailed';
+  quickType?: 'simple' | 'detailed';
+  style?: string;
+  structure?: {
+    level1: number;
+    level2: number;
+    level3: number;
+  };
+}
 
-【文章のルール】
-1. 文字数: 各項目20文字以内
-2. 文体: 名詞止め、または簡潔な表現
-3. 内容: 具体的で実践的な情報
+export const useOpenAI = create<OpenAIStore>((set, get) => ({
+  apiKey: null,
+  openai: null,
 
-【出力形式】
-テーマ：[中心テーマ]
+  setApiKey: (key: string) => {
+    const openai = new OpenAI({
+      apiKey: key,
+      dangerouslyAllowBrowser: true,
+    });
+    set({ apiKey: key, openai });
+  },
 
-メインブランチ1：[項目]
-├── 子1-1：[項目]
-│   ├── 孫1-1-1：[詳細]
-│   └── 孫1-1-2：[詳細]
-├── 子1-2：[項目]
-│   ├── 孫1-2-1：[詳細]
-│   └── 孫1-2-2：[詳細]
-└── 子1-3：[項目]
-    ├── 孫1-3-1：[詳細]
-    └── 孫1-3-2：[詳細]
-
-メインブランチ2：[項目]
-├── 子2-1：[項目]
-│   ├── 孫2-1-1：[詳細]
-│   └── 孫2-1-2：[詳細]
-├── 子2-2：[項目]
-│   ├── 孫2-2-1：[詳細]
-│   └── 孫2-2-2：[詳細]
-└── 子2-3：[項目]
-    ├── 孫2-3-1：[詳細]
-    └── 孫2-3-2：[詳細]
-
-メインブランチ3：[項目]
-├── 子3-1：[項目]
-│   ├── 孫3-1-1：[詳細]
-│   └── 孫3-1-2：[詳細]
-├── 子3-2：[項目]
-│   ├── 孫3-2-1：[詳細]
-│   └── 孫3-2-2：[詳細]
-└── 子3-3：[項目]
-    ├── 孫3-3-1：[詳細]
-    └── 孫3-3-2：[詳細]`;
-
-export const useOpenAI = () => {
-  const [apiKey, setApiKey] = useState<string | null>(
-    localStorage.getItem('openai_api_key')
-  );
-
-  const generateMindMap = async (prompt: string) => {
-    if (!apiKey) {
-      throw new Error('OpenAI API key not set');
-    }
+  generateSubTopics: async (topic: string, options?: GenerateOptions) => {
+    const { openai } = get();
+    if (!openai) throw new Error('OpenAI API key not set');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+      const isHow = options?.mode === 'how';
+      const isDetailed = options?.mode === 'detailed';
+      const isDetailedHow = isHow && options?.howType === 'detailed';
+      const isWhy = options?.mode === 'why';
+      const isDetailedWhy = isWhy && options?.whyType === 'detailed';
+      const isWhat = options?.mode === 'what';
+      const isDetailedWhat = isWhat && options?.whatType === 'detailed';
+      const isWhich = options?.mode === 'which';
+      const isDetailedWhich = isWhich && options?.whichType === 'detailed';
+      
+      let prompt;
+      if (isWhy) {
+        if (isDetailedWhy) {
+          prompt = `
+以下のトピックについて、「なぜ？」という視点から階層的な分析を生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3つの主要な「なぜ」の視点を生成
+2. 各視点に2-3個の具体的な理由を含める
+3. 簡潔で分かりやすい説明を心がける
+4. 論理的なつながりを意識する
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "なぜ${topic}なのか？",
+  "children": [
+    {
+      "label": "理由1",
+      "children": [
+        {
+          "label": "具体的な説明1-1",
+          "children": []
         },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
+        {
+          "label": "具体的な説明1-2",
+          "children": []
+        }
+      ]
+    }
+  ]
+}`;
+        } else {
+          prompt = `
+以下のトピックについて、「なぜ？」という視点から階層的な分析を生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3つの主要な「なぜ」の視点を生成
+2. 各視点に2-3個の具体的な理由を含める
+3. 簡潔で分かりやすい説明を心がける
+4. 論理的なつながりを意識する
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "なぜ${topic}なのか？",
+  "children": [
+    {
+      "label": "理由1",
+      "children": [
+        {
+          "label": "具体的な説明1-1",
+          "children": []
+        },
+        {
+          "label": "具体的な説明1-2",
+          "children": []
+        }
+      ]
+    }
+  ]
+}`;
+        }
+      } else if (isHow) {
+        if (isDetailedHow) {
+          prompt = `
+以下のトピックを達成するための詳細な手順を生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 5-7個の具体的な手順を生成
+2. 各手順に200-300文字程度の詳細な説明を含める
+3. 実践的で実行可能な手順にする
+4. 手順は論理的な順序で並べる
+5. 各手順にポイントや注意点も含める
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "実行手順",
+  "children": [
+    {
+      "label": "手順1のタイトル",
+      "description": "手順1の詳細な説明とポイント...",
+      "children": []
+    }
+  ]
+}`;
+        } else {
+          prompt = `
+以下のトピックを達成するための手順を階層的に生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3-4個のメイン手順を生成
+2. 各手順に2-3個の具体的なサブステップを含める
+3. 実践的で分かりやすい内容にする
+4. 論理的な順序で並べる
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "実行手順",
+  "children": [
+    {
+      "label": "手順1",
+      "children": [
+        {
+          "label": "サブステップ1-1",
+          "children": []
+        },
+        {
+          "label": "サブステップ1-2",
+          "children": []
+        }
+      ]
+    },
+    {
+      "label": "手順2",
+      "children": [
+        {
+          "label": "サブステップ2-1",
+          "children": []
+        },
+        {
+          "label": "サブステップ2-2",
+          "children": []
+        }
+      ]
+    }
+  ]
+}`;
+        }
+      } else if (isDetailed) {
+        prompt = `以下のトピックについて、詳細な説明付きのマインドマップを生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3つのメインサブトピックを生成
+2. 各サブトピックに100-200文字程度の詳細な説明を含める
+3. 説明は${options?.style || 'technical'}な文体で記述
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "メインテーマ",
+  "children": [
+    {
+      "label": "サブトピック1",
+      "description": "詳細な説明をここに記述...",
+      "children": []
+    },
+    {
+      "label": "サブトピック2",
+      "description": "詳細な説明をここに記述...",
+      "children": []
+    }
+  ]
+}
+`;
+      } else if (isWhat && !isDetailedWhat) {
+        prompt = `
+以下のトピックについて、3階層の階層的な説明を生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3つの主要な特徴や要素を生成
+2. 各特徴に2-3個の具体的な説明を含める
+3. 分かりやすい例を含める
+4. 簡潔な説明を心がける
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "${topic}とは",
+  "children": [
+    {
+      "label": "特徴1",
+      "children": [
+        {
+          "label": "具体的な説明1-1",
+          "children": []
+        }
+      ]
+    }
+  ]
+}`;
+      } else if (isWhich) {
+        if (isDetailedWhich) {
+          prompt = `
+以下のトピックについて、選択肢の比較分析を詳細に生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3-4個の主要な選択基準や比較ポイントを生成
+2. 各基準に200-300文字程度の詳細な分析を含める
+3. メリット・デメリットを明確に示す
+4. 具体的な例や数値を含める
+5. 状況に応じた推奨を含める
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "${topic}の選択",
+  "children": [
+    {
+      "label": "選択基準1",
+      "description": "詳細な分析...",
+      "children": []
+    }
+  ]
+}`;
+        } else {
+          prompt = `
+以下のトピックについて、選択肢の比較を階層的に生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 3つの主要な選択基準を生成
+2. 各基準に2-3個の具体的な比較ポイントを含める
+3. 簡潔な比較を心がける
+4. 分かりやすい例を含める
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "${topic}の選択",
+  "children": [
+    {
+      "label": "選択基準1",
+      "children": [
+        {
+          "label": "比較ポイント1-1",
+          "children": []
+        }
+      ]
+    }
+  ]
+}`;
+        }
+      } else if (options?.mode === 'quick' && options?.quickType === 'simple') {
+        prompt = `
+以下のトピックについて、3階層の詳細なマインドマップを生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 第1階層: 4-5個の主要カテゴリを生成
+2. 第2階層: 各カテゴリに3-4個のサブトピックを生成
+3. 第3階層: 各サブトピックに2-3個の具体的な項目を生成
+4. シンプルで分かりやすい単語や短いフレーズを使用
+5. 論理的な構造を維持
+6. 階層間の関連性を明確に
+
+応答は以下のような階層的なJSON形式にしてください:
+{
+  "label": "${topic}",
+  "children": [
+    {
+      "label": "カテゴリ1",
+      "children": [
+        {
+          "label": "サブトピック1-1",
+          "children": [
             {
-              role: 'system',
-              content: SYSTEM_PROMPT
+              "label": "具体的な項目1-1-1",
+              "children": []
             },
             {
-              role: 'user',
-              content: `テーマ「${prompt}」について、マインドマップを生成してください。
-以下の点を厳守してください：
-
-1. メインブランチは3つ作成
-2. 各メインブランチに3つの子ノードを作成
-3. 各子ノードに2つの孫ノードを作成
-4. 全ての項目は20文字以内の簡潔な表現
-5. 実践的で具体的な内容を含める
-6. 3階層の構造を必ず維持する
-
-※指定された構造（3メインブランチ×各3子ノード×各2孫ノード）は必ず守ってください。
-※必ず└──や├──などの記号を使って階層を表現してください。`
+              "label": "具体的な項目1-1-2",
+              "children": []
             }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000,
-          frequency_penalty: 0.3,
-          presence_penalty: 0.3,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw error;
+          ]
+        }
+      ]
+    }
+  ]
+}`;
       }
 
-      const data = await response.json();
-      return data.choices[0].message.content;
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "あなたはマインドマップ作成を支援するAIアシスタントです。与えられたトピックについて、階層的な構造を持つサブトピックを生成します。"
+          },
+          {
+            role: "user",
+            content: prompt || ''
+          }
+        ],
+        temperature: 0.7,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error('No content generated');
+
+      try {
+        const topicTree = JSON.parse(content);
+        return topicTree;
+      } catch (e) {
+        console.error('Failed to parse response:', content);
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
-      console.error('AI生成エラー:', error);
+      console.error('Error generating topics:', error);
       throw error;
     }
-  };
-
-  return {
-    apiKey,
-    setApiKey,
-    generateMindMap,
-  };
-};
+  },
+}));

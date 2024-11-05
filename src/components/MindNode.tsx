@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps, Node as ReactFlowNode } from 'reactflow';
 import { Plus, Sparkles } from 'lucide-react';
 import { useMindMapStore } from '../store/mindMapStore';
 import { useTypingAnimation } from '../hooks/useTypingAnimation';
-import { useOpenAI } from '../utils/openai';
+import { useOpenAI, TopicTree } from '../utils/openai';
 import { useReactFlow } from 'reactflow';
+
+// 階層構造の型を定義
+interface HierarchyItem {
+  level: number;
+  text: string;
+  children: HierarchyItem[];
+}
 
 const getNodeLevel = (edges: any[], nodeId: string): number => {
   let level = 0;
@@ -30,7 +37,7 @@ export function MindNode({ id, data }: NodeProps) {
   const hideTimeoutRef = useRef<number>();
   const { updateNodeText, addNode, nodes, edges } = useMindMapStore();
   const { displayText, startTyping } = useTypingAnimation(data.label);
-  const { generateMindMap, apiKey } = useOpenAI();
+  const { generateSubTopics, apiKey } = useOpenAI();
   const { fitView } = useReactFlow();
 
   const currentNode = nodes.find((n) => n.id === id);
@@ -96,7 +103,7 @@ export function MindNode({ id, data }: NodeProps) {
   const handleAddChild = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (currentNode) {
-      const newNode = addNode(currentNode, 'New Topic');
+      addNode(currentNode, 'New Topic');
       setTimeout(() => {
         fitView({ 
           duration: 400,
@@ -106,35 +113,33 @@ export function MindNode({ id, data }: NodeProps) {
     }
   };
 
-  const parseHierarchy = (text: string) => {
-    const lines = text.split('\n').filter(line => line.trim());
-    const hierarchy: { level: number; text: string; children: any[] }[] = [];
-    let currentMain: any = null;
-    let currentSub: any = null;
-
-    lines.forEach(line => {
-      const cleanText = line.replace(/^[└├│\s─]+/, '').trim();
-      if (!cleanText || cleanText.startsWith('テーマ：')) return;
-
-      if (line.startsWith('メインブランチ')) {
-        currentMain = { level: 0, text: cleanText, children: [] };
-        hierarchy.push(currentMain);
-        currentSub = null;
-      } else if (line.match(/^[└├]──\s/)) {
-        currentSub = { level: 1, text: cleanText, children: [] };
-        if (currentMain) currentMain.children.push(currentSub);
-      } else if (line.match(/^\s+[└├]──\s/)) {
-        const grandChild = { level: 2, text: cleanText, children: [] };
-        if (currentSub) currentSub.children.push(grandChild);
+  const parseTopicTree = (topicTree: TopicTree): HierarchyItem[] => {
+    const hierarchy: HierarchyItem[] = [];
+    
+    const processNode = (node: TopicTree, level: number = 0): HierarchyItem => {
+      const item: HierarchyItem = {
+        level,
+        text: node.label,
+        children: []
+      };
+      
+      if (node.children && node.children.length > 0) {
+        item.children = node.children.map((child: TopicTree) => processNode(child, level + 1));
       }
-    });
+      
+      return item;
+    };
+
+    if (topicTree.children) {
+      hierarchy.push(...topicTree.children.map((child: TopicTree) => processNode(child, 0)));
+    }
 
     return hierarchy;
   };
 
   const generateNodes = async (
-    parentNode: any,
-    items: { text: string; children: any[] }[],
+    parentNode: ReactFlowNode,
+    items: HierarchyItem[],
     level: number = 0
   ) => {
     for (const item of items) {
@@ -168,8 +173,11 @@ export function MindNode({ id, data }: NodeProps) {
 
     try {
       setIsGenerating(true);
-      const response = await generateMindMap(data.label);
-      const hierarchy = parseHierarchy(response);
+      const response = await generateSubTopics(data.label, {
+        mode: 'quick',
+        quickType: 'simple'
+      });
+      const hierarchy = parseTopicTree(response);
 
       if (currentNode) {
         await generateNodes(currentNode, hierarchy);
