@@ -1,69 +1,51 @@
 import { Node as ReactFlowNode } from 'reactflow';
-import { useOpenAI } from '../utils/openai';
+import { useOpenAI } from './useOpenAI';
 import { useMindMapStore } from '../store/mindMapStore';
 import { useReactFlow } from 'reactflow';
-import { HierarchyItem, TopicTree } from '../types/common';
-import { parseTopicTree } from '../utils/nodeUtils';
+import { TopicTree } from '../types/common';
 
 export const useAIGeneration = () => {
-  const { generateSubTopics } = useOpenAI();
+  const { generateSubTopics, apiKey } = useOpenAI();
   const store = useMindMapStore();
   const { fitView } = useReactFlow();
 
-  const generateNodes = async (
-    parentNode: ReactFlowNode,
-    items: HierarchyItem[],
-    level: number = 0
-  ) => {
-    const totalItems = items.length;
-    
-    for (const [index, item] of items.entries()) {
-      await new Promise(resolve => setTimeout(resolve, 50 + level * 30));
-      
-      const newNode = store.addNode(
-        parentNode,
-        item.text,
-        index,
-        totalItems
-      );
-
-      if (item.children && item.children.length > 0) {
-        await generateNodes(newNode, item.children, level + 1);
-      }
-    }
-  };
-
   const handleGenerate = async (
     nodeId: string, 
-    mode: 'quick' | 'detailed' | 'why' | 'how' | 'what' | 'which' = 'quick',
-    type: 'simple' | 'detailed' = 'simple'
-  ): Promise<void> => {
-    const currentNode = store.nodes.find(n => n.id === nodeId);
-    if (!currentNode) {
-      console.error('Node not found:', nodeId);
-      return;
+    mode: 'quick' | 'detailed' | 'why' | 'how' = 'quick',
+    options?: {
+      style?: string;
+      depth?: number;
+      count?: number;
     }
-
+  ): Promise<void> => {
     try {
-      console.log('Generating for node:', currentNode.data.label);
-      console.log('Mode:', mode, 'Type:', type);
-      
-      const response = await generateSubTopics(currentNode.data.label, {
-        mode,
-        quickType: type,
-      });
-
-      console.log('API Response:', response);
-      
-      if (!response || !response.children) {
-        throw new Error('Invalid API response');
+      const currentNode = store.nodes.find(n => n.id === nodeId);
+      if (!currentNode) {
+        console.error('Node not found:', nodeId);
+        return;
       }
 
-      const hierarchy = parseTopicTree(response);
-      await generateNodes(currentNode, hierarchy);
-
-      store.calculateLayout();
+      console.log('Starting generation for:', currentNode.data.label);
       
+      // 生成中の状態を設定
+      store.setNodeGenerating(nodeId, true);
+
+      const response = await generateSubTopics(currentNode.data.label, {
+        mode,
+        ...options
+      });
+
+      console.log('Generation response:', response);
+
+      // レスポンスの���証
+      if (!response || !response.children || response.children.length === 0) {
+        throw new Error('Invalid response format or empty response');
+      }
+
+      // ノードの生成
+      await store.createNodesFromAIResponse(nodeId, response);
+
+      // レイアウトの調整
       setTimeout(() => {
         fitView({
           duration: 800,
@@ -72,44 +54,46 @@ export const useAIGeneration = () => {
           maxZoom: 1,
         });
       }, 500);
+
     } catch (error) {
-      console.error('Generation failed:', error);
-      throw error;
+      console.error('Generation error:', error);
+      alert('生成に失敗しました');
+    } finally {
+      store.setNodeGenerating(nodeId, false);
     }
   };
 
-  const handleQuickGenerate = async (nodeId: string): Promise<void> => {
-    await handleGenerate(nodeId, 'quick', 'simple');
+  const handleQuickGenerate = async (nodeId: string) => {
+    return handleGenerate(nodeId, 'quick');
   };
 
-  const handleDetailedGenerate = async (nodeId: string): Promise<void> => {
-    await handleGenerate(nodeId, 'quick', 'detailed');
+  const handleDetailedGenerate = async (nodeId: string) => {
+    return handleGenerate(nodeId, 'detailed', {
+      style: 'technical',
+      depth: 2,
+      count: 3
+    });
   };
 
-  const handleWhyGenerate = async (nodeId: string, detailed = false): Promise<void> => {
-    await handleGenerate(nodeId, 'why', detailed ? 'detailed' : 'simple');
+  const handleWhyGenerate = async (nodeId: string) => {
+    return handleGenerate(nodeId, 'why', {
+      depth: 2,
+      count: 3
+    });
   };
 
-  const handleHowGenerate = async (nodeId: string, detailed = false): Promise<void> => {
-    await handleGenerate(nodeId, 'how', detailed ? 'detailed' : 'simple');
-  };
-
-  const handleWhatGenerate = async (nodeId: string, detailed = false): Promise<void> => {
-    await handleGenerate(nodeId, 'what', detailed ? 'detailed' : 'simple');
-  };
-
-  const handleWhichGenerate = async (nodeId: string, detailed = false): Promise<void> => {
-    await handleGenerate(nodeId, 'which', detailed ? 'detailed' : 'simple');
+  const handleHowGenerate = async (nodeId: string) => {
+    return handleGenerate(nodeId, 'how', {
+      depth: 2,
+      count: 3
+    });
   };
 
   return {
-    generateNodes,
-    handleGenerate,
     handleQuickGenerate,
     handleDetailedGenerate,
     handleWhyGenerate,
     handleHowGenerate,
-    handleWhatGenerate,
-    handleWhichGenerate,
+    apiKey
   };
 }; 

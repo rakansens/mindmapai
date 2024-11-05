@@ -12,6 +12,7 @@ import {
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { ReactFlowInstance } from 'reactflow';
+import { TopicTree, TopicTreeNode } from '../types/common';
 
 type LayoutType = 'horizontal' | 'vertical' | 'radial';
 
@@ -64,7 +65,9 @@ interface MindMapState {
   updateNodeData: (id: string, data: any) => void;
   selectNode: (nodeId: string) => void;
   setNodeGenerating: (nodeId: string, isGenerating: boolean) => void;
-  createNodesFromAIResponse: (parentId: string, response: string) => Promise<void>;
+  createNodesFromAIResponse: (parentId: string, response: TopicTree) => Promise<void>;
+  addChildNode: (parentId: string) => void;
+  addSiblingNode: (currentId: string) => void;
 }
 
 interface HistoryState {
@@ -240,98 +243,80 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
   calculateLayout: () => {
     const { nodes, edges, layout } = get();
     const spacing = {
-      h: HORIZONTAL_SPACING[layout],
-      v: VERTICAL_SPACING[layout],
+      horizontal: { x: 200, y: 100 },
+      vertical: { x: 100, y: 150 },
+      radial: { radius: 200 }
     };
 
-    // ノードの階層とグループを計算
-    const nodeHierarchy = new Map<string, number>();
-    const nodeGroups = new Map<string, string>();
-    const childrenCount = new Map<string, number>();
+    // ノードの階層を計算
+    const levels = new Map<string, number>();
+    const getNodeLevel = (nodeId: string): number => {
+      if (levels.has(nodeId)) {
+        return levels.get(nodeId)!;
+      }
 
-    // 階層とグループを計算
-    const calculateHierarchy = (nodeId: string, level: number = 0, parentId: string | null = null) => {
-      nodeHierarchy.set(nodeId, level);
-      if (parentId) nodeGroups.set(nodeId, parentId);
+      const parentEdge = edges.find(e => e.target === nodeId);
+      if (!parentEdge) {
+        levels.set(nodeId, 0);
+        return 0;
+      }
 
-      const children = edges
-        .filter(edge => edge.source === nodeId)
-        .map(edge => edge.target);
-
-      childrenCount.set(nodeId, children.length);
-      children.forEach(childId => calculateHierarchy(childId, level + 1, nodeId));
+      const parentLevel = getNodeLevel(parentEdge.source);
+      const level = parentLevel + 1;
+      levels.set(nodeId, level);
+      return level;
     };
 
-    // ルートノードを見つけて階層計算を開始
-    const rootNode = nodes.find(node => !edges.some(edge => edge.target === node.id));
-    if (rootNode) {
-      calculateHierarchy(rootNode.id);
-    }
+    // すべてのノードの階層を計算
+    nodes.forEach(node => getNodeLevel(node.id));
 
-    // 中心位置を計算
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 3;
+    // ノードを階層ごとにグループ化
+    const nodesByLevel = new Map<number, string[]>();
+    nodes.forEach(node => {
+      const level = levels.get(node.id) || 0;
+      if (!nodesByLevel.has(level)) {
+        nodesByLevel.set(level, []);
+      }
+      nodesByLevel.get(level)!.push(node.id);
+    });
 
-    // ルートノードを配置
-    if (rootNode) {
-      get().updateNodePosition(rootNode.id, { x: centerX, y: centerY });
-    }
+    // ノードの位置を更新
+    nodes.forEach(node => {
+      const level = levels.get(node.id) || 0;
+      const levelNodes = nodesByLevel.get(level) || [];
+      const index = levelNodes.indexOf(node.id);
+      const totalNodesInLevel = levelNodes.length;
 
-    // 各レベルノードを配置
-    const maxLevel = Math.max(...Array.from(nodeHierarchy.values()));
-    
-    for (let level = 1; level <= maxLevel; level++) {
-      const levelNodes = nodes.filter(node => nodeHierarchy.get(node.id) === level);
-      
-      levelNodes.forEach(node => {
-        const parentId = nodeGroups.get(node.id);
-        if (!parentId) return;
+      let x, y;
+      switch (layout) {
+        case 'horizontal':
+          x = level * spacing.horizontal.x;
+          y = (index - (totalNodesInLevel - 1) / 2) * spacing.horizontal.y;
+          break;
+        case 'vertical':
+          x = (index - (totalNodesInLevel - 1) / 2) * spacing.vertical.x;
+          y = level * spacing.vertical.y;
+          break;
+        case 'radial':
+          const angle = (index / totalNodesInLevel) * Math.PI * 2;
+          const radius = level * spacing.radial.radius;
+          x = Math.cos(angle) * radius;
+          y = Math.sin(angle) * radius;
+          break;
+        default:
+          x = 0;
+          y = 0;
+      }
 
-        const parent = nodes.find(n => n.id === parentId);
-        if (!parent) return;
+      // ルートノードの位置を基準に調整
+      const rootNode = nodes.find(n => levels.get(n.id) === 0);
+      if (rootNode) {
+        x += rootNode.position.x;
+        y += rootNode.position.y;
+      }
 
-        const siblings = edges
-          .filter(edge => edge.source === parentId)
-          .map(edge => edge.target);
-        
-        const nodeIndex = siblings.indexOf(node.id);
-        const totalSiblings = siblings.length;
-
-        let newPosition;
-        const levelMultiplier = Math.sqrt(level); // 階層が深くなるほど距離を調整
-
-        switch (layout) {
-          case 'vertical':
-            const xOffset = ((nodeIndex - (totalSiblings - 1) / 2) * spacing.h.sub * 1.2);
-            newPosition = {
-              x: parent.position.x + xOffset,
-              y: parent.position.y + (spacing.v.main * levelMultiplier),
-            };
-            break;
-
-          case 'radial':
-            const angleStep = (2 * Math.PI) / totalSiblings;
-            const baseAngle = -Math.PI / 2; // 上方向から開始
-            const angle = baseAngle + (nodeIndex * angleStep);
-            const radius = level * spacing.h.main;
-            newPosition = {
-              x: centerX + Math.cos(angle) * radius,
-              y: centerY + Math.sin(angle) * radius,
-            };
-            break;
-
-          default: // horizontal
-            const horizontalOffset = spacing.h.main * levelMultiplier;
-            const verticalOffset = ((nodeIndex - (totalSiblings - 1) / 2) * spacing.v.sub * 1.2);
-            newPosition = {
-              x: parent.position.x + horizontalOffset,
-              y: parent.position.y + verticalOffset,
-            };
-        }
-
-        get().updateNodePosition(node.id, newPosition);
-      });
-    }
+      get().updateNodePosition(node.id, { x, y });
+    });
   },
 
   updateNodeLabel: (id: string, newLabel: string) => {
@@ -641,7 +626,7 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     if (theme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.classList.toggle('dark', isDark);
-      // システムのテーマ変更を監視
+      // システムのテー変更を監視
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         document.documentElement.classList.toggle('dark', e.matches);
       });
@@ -731,46 +716,117 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     }));
   },
 
-  createNodesFromAIResponse: async (parentId, response) => {
+  createNodesFromAIResponse: async (parentId: string, response: TopicTree) => {
     try {
       console.log('Processing AI response:', response);
 
-      // レスポンスをパースしてノード構造に変換
-      const lines = response.split('\n').filter(line => line.trim());
+      if (!response || !response.children) {
+        throw new Error('Invalid response format');
+      }
+
       const newNodes: ReactFlowNode[] = [];
       const newEdges: Edge[] = [];
 
-      lines.forEach((line, index) => {
-        const level = (line.match(/└──|├──/g) || []).length;
-        const label = line.replace(/[└──├]/g, '').trim();
-        const nodeId = `${parentId}-${index + 1}`;
+      // 再帰的にノードを生成する関数
+      const createChildNodes = (
+        parentId: string,
+        children: TopicTreeNode[],
+        level: number = 0
+      ) => {
+        children.forEach((child, index) => {
+          const nodeId = `${parentId}-${Date.now()}-${index}`;
 
-        newNodes.push({
-          id: nodeId,
-          type: 'custom',
-          position: { x: 0, y: 0 }, // 位置はレイアウト関数で設定
-          data: { label, isGenerating: false }
+          newNodes.push({
+            id: nodeId,
+            type: 'mindNode',
+            position: { x: 0, y: 0 },
+            data: { 
+              label: child.label,
+              isGenerating: false,
+              description: child.description
+            }
+          });
+
+          newEdges.push({
+            id: `e${parentId}-${nodeId}`,
+            source: parentId,
+            target: nodeId,
+            type: 'smoothstep'
+          });
+
+          if (child.children && child.children.length > 0) {
+            createChildNodes(nodeId, child.children, level + 1);
+          }
         });
+      };
 
-        newEdges.push({
-          id: `edge-${parentId}-${index + 1}`,
-          source: parentId,
-          target: nodeId
-        });
-      });
+      createChildNodes(parentId, response.children);
 
-      // 既存のノードとエッジに追加
       set((state) => ({
         nodes: [...state.nodes, ...newNodes],
         edges: [...state.edges, ...newEdges],
       }));
 
-      // レイアウトを再計算
-      get().calculateLayout();
+      setTimeout(() => {
+        get().calculateLayout();
+      }, 100);
+
     } catch (error) {
       console.error('Error creating nodes:', error);
       throw error;
     }
+  },
+
+  addChildNode: (parentId: string) => {
+    const parentNode = get().nodes.find(n => n.id === parentId);
+    if (!parentNode) return;
+
+    const newNode = {
+      id: `${parentId}-${Date.now()}`,
+      type: 'mindNode',
+      data: { label: '新しいノード' },
+      position: { x: 0, y: 0 }
+    };
+
+    set((state) => ({
+      nodes: [...state.nodes, newNode],
+      edges: [...state.edges, {
+        id: `e${parentId}-${newNode.id}`,
+        source: parentId,
+        target: newNode.id,
+        type: 'smoothstep'
+      }]
+    }));
+
+    get().calculateLayout();
+  },
+
+  addSiblingNode: (currentId: string) => {
+    const currentNode = get().nodes.find(n => n.id === currentId);
+    if (!currentNode) return;
+
+    // 親エッジを見つける
+    const parentEdge = get().edges.find(e => e.target === currentId);
+    if (!parentEdge) return;
+
+    const newNode = {
+      id: `${parentEdge.source}-${Date.now()}`,
+      type: 'mindNode',
+      data: { label: '新しいノード' },
+      position: { x: 0, y: 0 }
+    };
+
+    set((state) => ({
+      nodes: [...state.nodes, newNode],
+      edges: [...state.edges, {
+        id: `e${parentEdge.source}-${newNode.id}`,
+        source: parentEdge.source,
+        target: newNode.id,
+        type: 'smoothstep'
+      }]
+    }));
+
+    get().calculateLayout();
   },
 }));
 

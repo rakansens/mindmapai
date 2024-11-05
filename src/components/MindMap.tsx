@@ -4,15 +4,17 @@ import ReactFlow, {
   Background,
   ReactFlowInstance,
   Connection,
-  Edge
+  Edge,
+  Panel
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useMindMapStore } from '../store/mindMapStore';
 import CustomNode from './CustomNode';
 import NodeMenu from './NodeMenu';
+import { Layout } from 'lucide-react';
 
 const nodeTypes = {
-  custom: CustomNode,
+  mindNode: CustomNode,
 };
 
 const MindMap = () => {
@@ -21,7 +23,8 @@ const MindMap = () => {
     edges, 
     onNodesChange, 
     onEdgesChange, 
-    onConnect 
+    onConnect,
+    calculateLayout
   } = useMindMapStore();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -31,6 +34,13 @@ const MindMap = () => {
   const onLoad = (_reactFlowInstance: ReactFlowInstance) => {
     setReactFlowInstance(_reactFlowInstance);
     _reactFlowInstance.fitView();
+  };
+
+  const handleLayoutClick = () => {
+    calculateLayout();
+    setTimeout(() => {
+      reactFlowInstance?.fitView({ duration: 500, padding: 0.2 });
+    }, 100);
   };
 
   const handleNodeClick = (event: React.MouseEvent, node: any) => {
@@ -64,7 +74,27 @@ const MindMap = () => {
       >
         <Controls />
         <Background color="#aaa" gap={16} />
+        
+        <Panel position="bottom-right" className="flex gap-2 mb-20 mr-4">
+          <button
+            onClick={handleLayoutClick}
+            className="p-2.5 rounded-lg bg-white/90 hover:bg-white
+              shadow-lg hover:shadow-xl
+              text-gray-700 hover:text-gray-900
+              border border-gray-200
+              transition-all duration-200
+              hover:scale-105
+              tooltip"
+            title="レイアウトを整える"
+          >
+            <Layout 
+              size={20}
+              className="stroke-current"
+            />
+          </button>
+        </Panel>
       </ReactFlow>
+      
       {selectedNodeId && menuPosition && (
         <NodeMenu
           nodeId={selectedNodeId}
