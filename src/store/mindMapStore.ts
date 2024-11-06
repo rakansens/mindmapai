@@ -13,8 +13,10 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { ReactFlowInstance } from 'reactflow';
 import { TopicTree, TopicTreeNode } from '../types/common';
+import dagre from 'dagre';
 
 type LayoutType = 'horizontal' | 'vertical' | 'radial';
+type LayoutDirection = 'TB' | 'BT' | 'LR' | 'RL';
 
 interface CopiedSubtree {
   root: ReactFlowNode;
@@ -68,6 +70,9 @@ interface MindMapState {
   createNodesFromAIResponse: (parentId: string, response: TopicTree) => Promise<void>;
   addChildNode: (parentId: string) => void;
   addSiblingNode: (currentId: string) => void;
+  autoLayout: () => void;
+  layoutDirection: LayoutDirection;
+  cycleLayout: () => void;
 }
 
 interface HistoryState {
@@ -109,6 +114,7 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
   theme: 'light',
   showMinimap: false,
   flowInstance: null,
+  layoutDirection: 'TB',
 
   onNodesChange: (changes) => {
     set({
@@ -580,7 +586,7 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     }
   },
 
-  // JSONとしてエクスポート
+  // JSONとしてエクポート
   exportAsJSON: () => {
     const state = {
       nodes: get().nodes,
@@ -781,11 +787,28 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     const parentNode = get().nodes.find(n => n.id === parentId);
     if (!parentNode) return;
 
+    const existingChildEdges = get().edges.filter(edge => edge.source === parentId);
+    const existingChildNodes = existingChildEdges
+      .map(edge => get().nodes.find(n => n.id === edge.target))
+      .filter((node): node is ReactFlowNode => node !== undefined);
+
+    let newY = parentNode.position.y;
+    
+    if (existingChildNodes.length > 0) {
+      const lastChild = existingChildNodes[existingChildNodes.length - 1];
+      if (lastChild) {
+        newY = lastChild.position.y + 100;
+      }
+    }
+
     const newNode = {
       id: `${parentId}-${Date.now()}`,
       type: 'mindNode',
       data: { label: '新しいノード' },
-      position: { x: 0, y: 0 }
+      position: { 
+        x: parentNode.position.x + 250, // 親ノードから右に250px
+        y: newY
+      }
     };
 
     set((state) => ({
@@ -809,11 +832,35 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     const parentEdge = get().edges.find(e => e.target === currentId);
     if (!parentEdge) return;
 
+    // 親ノードを取得
+    const parentNode = get().nodes.find(n => n.id === parentEdge.source);
+    if (!parentNode) return;
+
+    // 同じ親を持つ兄弟ノードを取得
+    const siblingEdges = get().edges.filter(edge => 
+      edge.source === parentEdge.source && edge.target !== currentId
+    );
+    const siblingNodes = siblingEdges.map(edge => 
+      get().nodes.find(n => n.id === edge.target)
+    ).filter(Boolean);
+
+    // 新しいノードのY座標を計算
+    let newY = currentNode.position.y;
+    if (siblingNodes.length > 0) {
+      const lastSibling = siblingNodes[siblingNodes.length - 1];
+      if (lastSibling) {
+        newY = lastSibling.position.y + 100;
+      }
+    }
+
     const newNode = {
       id: `${parentEdge.source}-${Date.now()}`,
       type: 'mindNode',
       data: { label: '新しいノード' },
-      position: { x: 0, y: 0 }
+      position: { 
+        x: currentNode.position.x, // 同じX座標
+        y: newY
+      }
     };
 
     set((state) => ({
@@ -827,6 +874,84 @@ export const useMindMapStore = create<MindMapState>((set, get) => ({
     }));
 
     get().calculateLayout();
+  },
+
+  autoLayout: () => {
+    const { nodes, edges, layoutDirection } = get();
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+    
+    // レイアウトの設定を方向に応じて調整
+    const settings = {
+      TB: { nodesep: 100, ranksep: 150 },
+      BT: { nodesep: 100, ranksep: 150 },
+      LR: { nodesep: 60, ranksep: 250 },
+      RL: { nodesep: 60, ranksep: 250 },
+    };
+
+    dagreGraph.setGraph({ 
+      rankdir: layoutDirection,
+      ...settings[layoutDirection],
+      align: 'DL',
+      ranker: 'tight-tree',
+      edgesep: 50,
+      marginx: 20,
+      marginy: 20,
+      acyclicer: 'greedy'
+    });
+
+    // Add nodes to dagre with adjusted sizes
+    nodes.forEach((node) => {
+      dagreGraph.setNode(node.id, { 
+        width: 180, 
+        height: layoutDirection === 'TB' || layoutDirection === 'BT' ? 60 : 80
+      });
+    });
+
+    // Add edges to dagre
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    // Calculate layout
+    dagre.layout(dagreGraph);
+
+    // Update node positions with transition
+    const newNodes = nodes.map((node) => {
+      const nodeWithPosition = dagreGraph.node(node.id);
+      return {
+        ...node,
+        position: {
+          x: nodeWithPosition.x - 90,
+          y: nodeWithPosition.y - (layoutDirection === 'TB' || layoutDirection === 'BT' ? 30 : 40),
+        },
+      };
+    });
+
+    // エッジの設定を変更 - カスタムスタイルを削除
+    const newEdges = edges.map(edge => ({
+      ...edge,
+      type: 'smoothstep',  // 'custom'から'smoothstep'に変更
+      animated: false,     // アニメーションを無効化
+      style: {
+        stroke: '#2563eb',
+        strokeWidth: 2,
+      },
+    }));
+
+    set({ 
+      nodes: newNodes,
+      edges: newEdges
+    });
+  },
+
+  cycleLayout: () => {
+    const directions: LayoutDirection[] = ['TB', 'LR', 'RL', 'BT'];
+    const currentDirection = get().layoutDirection;
+    const currentIndex = directions.indexOf(currentDirection);
+    const nextDirection = directions[(currentIndex + 1) % directions.length];
+    set({ layoutDirection: nextDirection });
+    get().autoLayout();
   },
 }));
 

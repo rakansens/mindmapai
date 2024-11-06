@@ -8,16 +8,14 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import { MindNode } from './components/MindNode';
 import { Toolbar } from './components/Toolbar';
-import { ApiKeyInput } from './components/ApiKeyInput';
+import CustomNode from './components/nodes/CustomNode';
+import CustomEdge from './components/nodes/CustomEdge';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useMindMapStore } from './store/mindMapStore';
 import { useMenuStore } from './store/menuStore';
-import { useOpenAI } from './utils/openai';
-import CustomNode from './components/CustomNode';
-import CustomEdge from './components/CustomEdge';
-import ViewControls from './components/ViewControls';
+import { useOpenAI } from './hooks/useOpenAI';
+import { ViewControls } from './components/ViewControls';
 
 const nodeTypes: NodeTypes = {
   mindNode: CustomNode,
@@ -46,32 +44,29 @@ function Flow() {
   };
 
   return (
-    <>
-      <ApiKeyInput onSave={setApiKey} />
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultEdgeOptions={{
-          type: 'custom',
-          animated: true,
-        }}
-        connectionLineType={ConnectionLineType.SmoothStep}
-        fitView
-        className="bg-blue-50"
-        onInit={setFlowInstance}
-        onPaneClick={handlePaneClick}
-      >
-        <Background color="#2563eb" gap={16} size={1} />
-        <Controls />
-        <Toolbar />
-        <ViewControls />
-      </ReactFlow>
-    </>
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      defaultEdgeOptions={{
+        type: 'custom',
+        animated: true,
+      }}
+      connectionLineType={ConnectionLineType.SmoothStep}
+      fitView
+      className="bg-blue-50 dark:bg-gray-900"
+      onInit={setFlowInstance}
+      onPaneClick={handlePaneClick}
+      proOptions={{ hideAttribution: true }}
+    >
+      <Background color="#2563eb" gap={16} size={1} />
+      <Toolbar />
+      <ViewControls />
+    </ReactFlow>
   );
 }
 

@@ -232,6 +232,37 @@ export const useOpenAI = create<OpenAIState>((set, get) => ({
   ]
 }`;
           break;
+
+        case 'ideas':
+          prompt = `
+以下のトピックについて、10個のアイディアを生成してください。
+
+トピック: "${topic}"
+
+要件:
+1. 10個のユニークなアイディアを生成
+2. 各アイディアに2-3行の簡潔な説明を含める
+3. 実現可能で具体的なアイディアを心がける
+4. 多様な視点からのアイディアを含める
+
+必ず以下のJSON形式で返してください。他の文章は含めないでください:
+{
+  "label": "${topic}のアイディア",
+  "children": [
+    {
+      "label": "アイディア1: [アイディアのタイトル]",
+      "description": "アイディアの具体的な説明（2-3行）\\n• メリット\\n• 実現方法",
+      "children": []
+    },
+    {
+      "label": "アイディア2: [アイディアのタイトル]",
+      "description": "アイディアの具体的な説明（2-3行）\\n• メリット\\n• 実現方法",
+      "children": []
+    }
+    // ... 10個のアイディア
+  ]
+}`;
+          break;
       }
 
       const response = await openai.chat.completions.create({

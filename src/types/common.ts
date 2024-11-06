@@ -23,8 +23,18 @@ export interface TopicTreeNode {
 }
 
 export interface GenerateOptions {
-  mode: 'quick' | 'detailed' | 'why' | 'how';
+  mode: 'quick' | 'detailed' | 'why' | 'how' | 'ideas';
   style?: string;
   depth?: number;
   count?: number;
+}
+
+// color プロパティの型を拡張
+export type ButtonColorType = 'blue' | 'purple' | 'green' | 'orange' | 'yellow';
+
+export interface GenerateMenuButtonProps {
+  onClick: () => void;
+  icon: React.ReactNode;
+  tooltip: string;
+  color: ButtonColorType;
 } 

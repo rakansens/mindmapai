@@ -91,4 +91,24 @@ export const getNodeStyle = (level: number) => {
     default:
       return 'bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-violet-200';
   }
-}; 
+};
+
+export const calculateNodeWidth = (text: string, minWidth = 120, maxWidth = 400) => {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return minWidth;
+
+  context.font = '14px sans-serif';
+  const metrics = context.measureText(text);
+  const textWidth = metrics.width;
+  const padding = 32;
+  
+  return Math.min(maxWidth, Math.max(minWidth, textWidth + padding));
+};
+
+export const formatDescription = (description: string) => {
+  return description.split('\n').map(line => ({
+    isBullet: line.startsWith(''),
+    text: line.startsWith('') ? line.substring(1).trim() : line
+  }));
+};

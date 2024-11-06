@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { useMindMapStore } from '../store/mindMapStore';
-import { useAIGeneration } from '../hooks/useAIGeneration';
+import { useMindMapStore } from '../../store/mindMapStore';
+import { useAIGeneration } from '../../hooks/useAIGeneration';
 import { CSSTransition } from 'react-transition-group';
 
 interface NodeMenuProps {
