@@ -3,7 +3,7 @@ import { Handle, Position, NodeProps, Node as ReactFlowNode } from 'reactflow';
 import { Plus, Sparkles } from 'lucide-react';
 import { useMindMapStore } from '../store/mindMapStore';
 import { useTypingAnimation } from '../hooks/useTypingAnimation';
-import { useOpenAI, TopicTree } from '../utils/openai';
+import { useOpenAI } from '../utils/openai';
 import { useReactFlow } from 'reactflow';
 
 // 階層構造の型を定義
@@ -13,6 +13,13 @@ interface HierarchyItem {
   children: HierarchyItem[];
 }
 
+// TopicTree型の定義
+interface TopicTree {
+  label: string;
+  children?: TopicTree[];
+}
+
+// getNodeLevel関数の定義
 const getNodeLevel = (edges: any[], nodeId: string): number => {
   let level = 0;
   let currentId = nodeId;
@@ -211,7 +218,6 @@ export function MindNode({ id, data }: NodeProps) {
         return 'bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-violet-200';
     }
   };
-
   return (
     <div
       ref={nodeRef}
@@ -225,7 +231,7 @@ export function MindNode({ id, data }: NodeProps) {
         className={`w-3 h-3 transition-all duration-300 ${showButtons ? 'scale-125' : ''}`} 
       />
       <div 
-        className={`min-w-[120px] rounded-xl shadow-lg p-4 transition-all duration-300 transform
+        className={`!w-[800px] min-h-[120px] rounded-xl shadow-lg p-3 transition-all duration-300 transform
           ${getNodeStyle()}
           ${showButtons ? 'scale-105' : ''}
           ${data.isNew ? 'animate-fadeIn' : ''}
@@ -233,17 +239,20 @@ export function MindNode({ id, data }: NodeProps) {
         onClick={handleClick}
       >
         {isEditing ? (
-          <input
-            ref={inputRef}
-            className="w-full bg-transparent outline-none text-white placeholder-white/70 focus:ring-2 focus:ring-white/30 rounded px-1"
-            value={inputValue}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            autoFocus
-          />
+          <div className="w-full h-full">
+            <input
+              ref={inputRef}
+              className="w-full bg-transparent outline-none text-white placeholder-white/70 
+                focus:ring-2 focus:ring-white/30 rounded px-2 py-2"
+              value={inputValue}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              autoFocus
+            />
+          </div>
         ) : (
-          <div className={`cursor-text ${data.isNew ? 'typing-cursor' : ''} font-medium`}>
+          <div className="cursor-text break-words px-4 py-3 min-h-[100px]">
             {data.isNew ? displayText : data.label}
           </div>
         )}
