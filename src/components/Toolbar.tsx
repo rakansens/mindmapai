@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMindMapStore } from '../store/mindMapStore';
+import { cn } from '../utils/cn';
 
 // ツールチップの位置を調整
 const Tooltip: React.FC<{ text: string; children: React.ReactNode; position?: 'top' | 'bottom' | 'left' }> = ({ 
@@ -35,6 +36,30 @@ const Tooltip: React.FC<{ text: string; children: React.ReactNode; position?: 't
     </div>
   );
 };
+
+// レイアウトボタンの定義
+const layouts = [
+  {
+    id: 'horizontal',
+    icon: '⇔',
+    label: '水平レイアウト'
+  },
+  {
+    id: 'vertical',
+    icon: '⇕',
+    label: '垂直レイアウト'
+  },
+  {
+    id: 'radial',
+    icon: '☆',
+    label: '放射状レイアウト'
+  },
+  {
+    id: 'tree',
+    icon: '⋈',
+    label: 'ツリーレイアウト'
+  }
+] as const;
 
 export const Toolbar: React.FC = () => {
   const store = useMindMapStore();
@@ -97,6 +122,28 @@ export const Toolbar: React.FC = () => {
         `}
       >
         <div className="flex gap-2 items-center backdrop-blur-sm bg-white/80 p-2 rounded-xl shadow-lg border border-blue-100">
+          {/* レイアウトボタン */}
+          <div className="flex gap-1">
+            {layouts.map((item) => (
+              <Tooltip key={item.id} text={item.label} position="bottom">
+                <button
+                  onClick={() => store.setLayout(item.id as any)}
+                  className={cn(
+                    "w-9 h-9 rounded-lg border text-lg flex items-center justify-center",
+                    "transition-all duration-200",
+                    store.layout === item.id
+                      ? "border-blue-500 bg-blue-50 text-blue-600"
+                      : "border-gray-200 text-gray-600 hover:bg-blue-50/50"
+                  )}
+                >
+                  {item.icon}
+                </button>
+              </Tooltip>
+            ))}
+          </div>
+
+          <div className="w-px h-8 bg-blue-100/50" />
+
           {/* Save & Load */}
           <div className="flex gap-1">
             <Tooltip text="マインドマップを保存" position="bottom">
