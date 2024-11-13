@@ -1,5 +1,8 @@
 import React from 'react';
-import { EdgeProps, getBezierPath } from 'reactflow';
+import { EdgeProps, getBezierPath, getSmoothStepPath } from 'reactflow';
+import { useMindMapStore } from '../../store/mindMapStore';
+
+type EdgeStyle = 'bezier' | 'smoothstep' | 'organic';
 
 const CustomEdge: React.FC<EdgeProps> = ({
   id,
@@ -12,20 +15,55 @@ const CustomEdge: React.FC<EdgeProps> = ({
   style = {},
   markerEnd,
 }) => {
-  // ベジェ曲線のコントロールポイントを計算
-  const midX = (sourceX + targetX) / 2;
-  const [path] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    curvature: 0.3  // 曲線の強さを調整
-  });
+  const { edgeStyle } = useMindMapStore();
+
+  // エッジスタイルに応じてパスを生成
+  const getPath = () => {
+    const commonParams = {
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    };
+
+    switch (edgeStyle) {
+      case 'bezier':
+        return getBezierPath({
+          ...commonParams,
+          curvature: 0.3,
+        });
+      case 'organic':
+        // オーガニックスタイルはベジェ曲線をベースに、より自然な曲線を生成
+        const midX = (sourceX + targetX) / 2;
+        const midY = (sourceY + targetY) / 2;
+        const dx = targetX - sourceX;
+        const dy = targetY - sourceY;
+        const angle = Math.atan2(dy, dx);
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const controlLength = length * 0.4;
+        
+        const control1X = sourceX + Math.cos(angle + Math.PI / 6) * controlLength;
+        const control1Y = sourceY + Math.sin(angle + Math.PI / 6) * controlLength;
+        const control2X = targetX - Math.cos(angle - Math.PI / 6) * controlLength;
+        const control2Y = targetY - Math.sin(angle - Math.PI / 6) * controlLength;
+        
+        return [`M ${sourceX},${sourceY} C ${control1X},${control1Y} ${control2X},${control2Y} ${targetX},${targetY}`];
+      default:
+        return getSmoothStepPath({
+          ...commonParams,
+          borderRadius: 16,
+          offset: 16,
+        });
+    }
+  };
+
+  const [path] = getPath();
 
   return (
     <g>
+      {/* メインのパス */}
       <path
         id={id}
         className="react-flow__edge-path"
@@ -38,6 +76,7 @@ const CustomEdge: React.FC<EdgeProps> = ({
         }}
         markerEnd={markerEnd}
       />
+
       {/* アニメーション用のパス */}
       <path
         d={path}
@@ -49,6 +88,7 @@ const CustomEdge: React.FC<EdgeProps> = ({
           opacity: 0.5,
         }}
       />
+
       <style>
         {`
           @keyframes flow {
@@ -65,4 +105,4 @@ const CustomEdge: React.FC<EdgeProps> = ({
   );
 };
 
-export default CustomEdge; 
+export default CustomEdge;
